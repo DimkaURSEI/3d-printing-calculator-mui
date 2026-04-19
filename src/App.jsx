@@ -1,6 +1,9 @@
 import { useState, useEffect } from 'react'
 import { Button } from '@mui/material'
-import { CloudUpload, CloudDownload } from '@mui/icons-material'
+import { Login, Logout } from '@mui/icons-material'
+import { auth, db } from './firebase'
+import { signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged } from 'firebase/auth'
+import { ref, set, onValue, push } from 'firebase/database'
 import {
   Container,
   Typography,
@@ -80,6 +83,105 @@ const theme = createTheme({
 })
 
 function App() {
+  const [user, setUser] = useState(null)
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [isLogin, setIsLogin] = useState(true)
+  const [authError, setAuthError] = useState('')
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      setUser(user)
+      if (user) {
+        loadSettingsFromFirebase(user.uid)
+      }
+    })
+    return unsubscribe
+  }, [])
+
+  const handleAuth = async (e) => {
+    e.preventDefault()
+    setAuthError('')
+    
+    try {
+      if (isLogin) {
+        await signInWithEmailAndPassword(auth, email, password)
+      } else {
+        await createUserWithEmailAndPassword(auth, email, password)
+      }
+    } catch (error) {
+      setAuthError(error.message)
+    }
+  }
+
+  const handleLogout = async () => {
+    await signOut(auth)
+  }
+
+  const saveSettingsToFirebase = async (uid) => {
+    const settings = {
+      printerType,
+      materialCost,
+      materialWeight,
+      equipmentCost,
+      equipmentLifespan,
+      printTime,
+      electricityRate,
+      printerPower,
+      monthlyRent,
+      laborHourlyRate,
+      laborHours,
+      consumables,
+      painting,
+      postProcessing,
+    }
+    
+    try {
+      await set(ref(db, `users/${uid}/settings`), settings)
+    } catch (error) {
+      console.error('Error saving to Firebase:', error)
+    }
+  }
+
+  const loadSettingsFromFirebase = (uid) => {
+    const settingsRef = ref(db, `users/${uid}/settings`)
+    onValue(settingsRef, (snapshot) => {
+      const data = snapshot.val()
+      if (data) {
+        setPrinterType(data.printerType || 'filament')
+        setMaterialCost(data.materialCost || '')
+        setMaterialWeight(data.materialWeight || '')
+        setEquipmentCost(data.equipmentCost || '')
+        setEquipmentLifespan(data.equipmentLifespan || '5')
+        setPrintTime(data.printTime || '')
+        setElectricityRate(data.electricityRate || '')
+        setPrinterPower(data.printerPower || '')
+        setMonthlyRent(data.monthlyRent || '')
+        setLaborHourlyRate(data.laborHourlyRate || '')
+        setLaborHours(data.laborHours || '')
+        setConsumables(data.consumables || {
+          isopropylAlcohol: '',
+          dyes: '',
+          separators: '',
+          paint: '',
+        })
+        setPainting(data.painting || {
+          electricityRate: '',
+          compressorCost: '',
+          airbrushCost: '',
+          primerCost: '',
+          paintConsumables: '',
+        })
+        setPostProcessing(data.postProcessing || {
+          abrasive: '',
+          woodenSticks: '',
+          plasticSticks: '',
+          dremelConsumables: '',
+        })
+      }
+    })
+  }
+
   const [printerType, setPrinterType] = useState('filament')
   const [materialCost, setMaterialCost] = useState('')
   const [materialWeight, setMaterialWeight] = useState('')
@@ -171,114 +273,12 @@ function App() {
       postProcessing,
     }
     localStorage.setItem('3dPrintCalculatorSettings', JSON.stringify(settings))
-  }, [printerType, materialCost, materialWeight, equipmentCost, equipmentLifespan, printTime, electricityRate, printerPower, monthlyRent, laborHourlyRate, laborHours, consumables, painting, postProcessing])
-
-  // JSONBin.io sync functions
-  const saveToCloud = async () => {
-    const apiKey = localStorage.getItem('jsonbinApiKey') || ''
-    const binId = localStorage.getItem('jsonbinBinId') || ''
     
-    if (!apiKey || !binId) {
-      alert('Сначала настройте JSONBin.io:\n1. Зарегистрируйтесь на jsonbin.io\n2. Создайте новый bin\n3. Введите API Key и Bin ID в настройках')
-      return
+    // Also save to Firebase if user is logged in
+    if (user) {
+      saveSettingsToFirebase(user.uid)
     }
-
-    const settings = {
-      printerType,
-      materialCost,
-      materialWeight,
-      equipmentCost,
-      equipmentLifespan,
-      printTime,
-      electricityRate,
-      printerPower,
-      monthlyRent,
-      laborHourlyRate,
-      laborHours,
-      consumables,
-      painting,
-      postProcessing,
-    }
-
-    try {
-      const response = await fetch(`https://api.jsonbin.io/v3/b/${binId}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Master-Key': apiKey,
-        },
-        body: JSON.stringify(settings),
-      })
-
-      if (response.ok) {
-        alert('Настройки сохранены в облаке!')
-      } else {
-        alert('Ошибка сохранения: ' + response.statusText)
-      }
-    } catch (error) {
-      alert('Ошибка сети: ' + error.message)
-    }
-  }
-
-  const loadFromCloud = async () => {
-    const apiKey = localStorage.getItem('jsonbinApiKey') || ''
-    const binId = localStorage.getItem('jsonbinBinId') || ''
-    
-    if (!apiKey || !binId) {
-      alert('Сначала настройте JSONBin.io:\n1. Зарегистрируйтесь на jsonbin.io\n2. Создайте новый bin\n3. Введите API Key и Bin ID в настройках')
-      return
-    }
-
-    try {
-      const response = await fetch(`https://api.jsonbin.io/v3/b/${binId}/latest`, {
-        headers: {
-          'X-Master-Key': apiKey,
-        },
-      })
-
-      if (response.ok) {
-        const data = await response.json()
-        const settings = data.record
-        
-        setPrinterType(settings.printerType || 'filament')
-        setMaterialCost(settings.materialCost || '')
-        setMaterialWeight(settings.materialWeight || '')
-        setEquipmentCost(settings.equipmentCost || '')
-        setEquipmentLifespan(settings.equipmentLifespan || '5')
-        setPrintTime(settings.printTime || '')
-        setElectricityRate(settings.electricityRate || '')
-        setPrinterPower(settings.printerPower || '')
-        setMonthlyRent(settings.monthlyRent || '')
-        setLaborHourlyRate(settings.laborHourlyRate || '')
-        setLaborHours(settings.laborHours || '')
-        setConsumables(settings.consumables || {
-          isopropylAlcohol: '',
-          dyes: '',
-          separators: '',
-          paint: '',
-        })
-        setPainting(settings.painting || {
-          electricityRate: '',
-          compressorCost: '',
-          airbrushCost: '',
-          primerCost: '',
-          paintConsumables: '',
-        })
-        setPostProcessing(settings.postProcessing || {
-          abrasive: '',
-          woodenSticks: '',
-          plasticSticks: '',
-          dremelConsumables: '',
-        })
-        
-        alert('Настройки загружены из облака!')
-      } else {
-        alert('Ошибка загрузки: ' + response.statusText)
-      }
-    } catch (error) {
-      alert('Ошибка сети: ' + error.message)
-    }
-  }
+  }, [printerType, materialCost, materialWeight, equipmentCost, equipmentLifespan, printTime, electricityRate, printerPower, monthlyRent, laborHourlyRate, laborHours, consumables, painting, postProcessing, user])
 
   const calculateCosts = () => {
     const materialCostNum = parseFloat(materialCost) || 0
@@ -333,13 +333,103 @@ function App() {
     setPostProcessing(prev => ({ ...prev, [field]: value }))
   }
 
-  const [apiKey, setApiKey] = useState(localStorage.getItem('jsonbinApiKey') || '')
-  const [binId, setBinId] = useState(localStorage.getItem('jsonbinBinId') || '')
+  if (!user) {
+    return (
+      <ThemeProvider theme={theme}>
+        <Box
+          sx={{
+            minHeight: '100vh',
+            background: 'linear-gradient(135deg, #0f172a 0%, #1e1b4b 50%, #0f172a 100%)',
+            py: 4,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          <Container maxWidth="sm">
+            <Fade in timeout={800}>
+              <Card sx={{ p: 4 }}>
+                <CardContent>
+                  <Box sx={{ textAlign: 'center', mb: 4 }}>
+                    <Avatar
+                      sx={{
+                        width: 80,
+                        height: 80,
+                        mx: 'auto',
+                        mb: 3,
+                        background: 'linear-gradient(135deg, #7c3aed 0%, #ec4899 100%)',
+                        fontSize: 40,
+                      }}
+                    >
+                      <Print />
+                    </Avatar>
+                    <Typography
+                      variant="h4"
+                      sx={{
+                        fontWeight: 700,
+                        mb: 2,
+                        background: 'linear-gradient(135deg, #7c3aed 0%, #ec4899 100%)',
+                        WebkitBackgroundClip: 'text',
+                        WebkitTextFillColor: 'transparent',
+                        backgroundClip: 'text',
+                      }}
+                    >
+                      Калькулятор стоимости 3D-печати
+                    </Typography>
+                    <Typography variant="subtitle1" color="text.secondary">
+                      {isLogin ? 'Войдите для продолжения' : 'Создайте аккаунт'}
+                    </Typography>
+                  </Box>
 
-  const handleSaveConfig = () => {
-    localStorage.setItem('jsonbinApiKey', apiKey)
-    localStorage.setItem('jsonbinBinId', binId)
-    alert('Конфигурация JSONBin.io сохранена!')
+                  <form onSubmit={handleAuth}>
+                    <TextField
+                      fullWidth
+                      size="small"
+                      label="Email"
+                      type="email"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      sx={{ mb: 2 }}
+                      required
+                    />
+                    <TextField
+                      fullWidth
+                      size="small"
+                      label="Пароль"
+                      type="password"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      sx={{ mb: 2 }}
+                      required
+                    />
+                    {authError && (
+                      <Typography color="error" sx={{ mb: 2 }}>
+                        {authError}
+                      </Typography>
+                    )}
+                    <Button
+                      fullWidth
+                      variant="contained"
+                      type="submit"
+                      sx={{ mb: 2 }}
+                    >
+                      {isLogin ? 'Войти' : 'Зарегистрироваться'}
+                    </Button>
+                    <Button
+                      fullWidth
+                      variant="text"
+                      onClick={() => setIsLogin(!isLogin)}
+                    >
+                      {isLogin ? 'Нет аккаунта? Зарегистрироваться' : 'Уже есть аккаунт? Войти'}
+                    </Button>
+                  </form>
+                </CardContent>
+              </Card>
+            </Fade>
+          </Container>
+        </Box>
+      </ThemeProvider>
+    )
   }
 
   return (
@@ -382,75 +472,21 @@ function App() {
               <Typography variant="subtitle1" color="text.secondary">
                 Профессиональный расчёт стоимости печати
               </Typography>
+              <Box sx={{ mt: 2 }}>
+                <Chip label={`👤 ${user.email}`} sx={{ mr: 1 }} />
+                <Button
+                  size="small"
+                  variant="outlined"
+                  startIcon={<Logout />}
+                  onClick={handleLogout}
+                >
+                  Выйти
+                </Button>
+              </Box>
             </Box>
           </Fade>
 
           <Grid container spacing={2}>
-            <Grid item xs={12}>
-              <Card sx={{ mb: 2 }}>
-                <CardContent sx={{ p: 2 }}>
-                  <Typography variant="subtitle1" fontWeight={600} sx={{ mb: 2 }}>
-                    ☁️ Синхронизация с облаком (JSONBin.io)
-                  </Typography>
-                  <Grid container spacing={2} alignItems="center">
-                    <Grid item xs={12} sm={3}>
-                      <TextField
-                        fullWidth
-                        size="small"
-                        label="API Key"
-                        value={apiKey}
-                        onChange={(e) => setApiKey(e.target.value)}
-                        placeholder="$2b$10$..."
-                      />
-                    </Grid>
-                    <Grid item xs={12} sm={3}>
-                      <TextField
-                        fullWidth
-                        size="small"
-                        label="Bin ID"
-                        value={binId}
-                        onChange={(e) => setBinId(e.target.value)}
-                        placeholder="65f..."
-                      />
-                    </Grid>
-                    <Grid item xs={12} sm={2}>
-                      <Button
-                        fullWidth
-                        variant="outlined"
-                        size="small"
-                        onClick={handleSaveConfig}
-                      >
-                        Сохранить
-                      </Button>
-                    </Grid>
-                    <Grid item xs={12} sm={2}>
-                      <Button
-                        fullWidth
-                        variant="contained"
-                        size="small"
-                        startIcon={<CloudUpload />}
-                        onClick={saveToCloud}
-                        color="primary"
-                      >
-                        В облако
-                      </Button>
-                    </Grid>
-                    <Grid item xs={12} sm={2}>
-                      <Button
-                        fullWidth
-                        variant="contained"
-                        size="small"
-                        startIcon={<CloudDownload />}
-                        onClick={loadFromCloud}
-                        color="secondary"
-                      >
-                        Из облака
-                      </Button>
-                    </Grid>
-                  </Grid>
-                </CardContent>
-              </Card>
-            </Grid>
             <Grid item xs={12} md={4} lg={3}>
               <Card sx={{ height: '100%' }}>
                 <CardContent sx={{ p: 2 }}>
