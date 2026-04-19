@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import {
   Container,
   Typography,
@@ -111,6 +111,65 @@ function App() {
     plasticSticks: '',
     dremelConsumables: '',
   })
+
+  // Load settings from LocalStorage on mount
+  useEffect(() => {
+    const savedSettings = localStorage.getItem('3dPrintCalculatorSettings')
+    if (savedSettings) {
+      const settings = JSON.parse(savedSettings)
+      setPrinterType(settings.printerType || 'filament')
+      setMaterialCost(settings.materialCost || '')
+      setMaterialWeight(settings.materialWeight || '')
+      setEquipmentCost(settings.equipmentCost || '')
+      setEquipmentLifespan(settings.equipmentLifespan || '5')
+      setPrintTime(settings.printTime || '')
+      setElectricityRate(settings.electricityRate || '')
+      setPrinterPower(settings.printerPower || '')
+      setMonthlyRent(settings.monthlyRent || '')
+      setLaborHourlyRate(settings.laborHourlyRate || '')
+      setLaborHours(settings.laborHours || '')
+      setConsumables(settings.consumables || {
+        isopropylAlcohol: '',
+        dyes: '',
+        separators: '',
+        paint: '',
+      })
+      setPainting(settings.painting || {
+        electricityRate: '',
+        compressorCost: '',
+        airbrushCost: '',
+        primerCost: '',
+        paintConsumables: '',
+      })
+      setPostProcessing(settings.postProcessing || {
+        abrasive: '',
+        woodenSticks: '',
+        plasticSticks: '',
+        dremelConsumables: '',
+      })
+    }
+  }, [])
+
+  // Save settings to LocalStorage on any change
+  useEffect(() => {
+    const settings = {
+      printerType,
+      materialCost,
+      materialWeight,
+      equipmentCost,
+      equipmentLifespan,
+      printTime,
+      electricityRate,
+      printerPower,
+      monthlyRent,
+      laborHourlyRate,
+      laborHours,
+      consumables,
+      painting,
+      postProcessing,
+    }
+    localStorage.setItem('3dPrintCalculatorSettings', JSON.stringify(settings))
+  }, [printerType, materialCost, materialWeight, equipmentCost, equipmentLifespan, printTime, electricityRate, printerPower, monthlyRent, laborHourlyRate, laborHours, consumables, painting, postProcessing])
 
   const calculateCosts = () => {
     const materialCostNum = parseFloat(materialCost) || 0
