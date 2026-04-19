@@ -1,4 +1,6 @@
 import { useState, useEffect } from 'react'
+import { Button } from '@mui/material'
+import { CloudUpload, CloudDownload } from '@mui/icons-material'
 import {
   Container,
   Typography,
@@ -171,6 +173,113 @@ function App() {
     localStorage.setItem('3dPrintCalculatorSettings', JSON.stringify(settings))
   }, [printerType, materialCost, materialWeight, equipmentCost, equipmentLifespan, printTime, electricityRate, printerPower, monthlyRent, laborHourlyRate, laborHours, consumables, painting, postProcessing])
 
+  // JSONBin.io sync functions
+  const saveToCloud = async () => {
+    const apiKey = localStorage.getItem('jsonbinApiKey') || ''
+    const binId = localStorage.getItem('jsonbinBinId') || ''
+    
+    if (!apiKey || !binId) {
+      alert('Сначала настройте JSONBin.io:\n1. Зарегистрируйтесь на jsonbin.io\n2. Создайте новый bin\n3. Введите API Key и Bin ID в настройках')
+      return
+    }
+
+    const settings = {
+      printerType,
+      materialCost,
+      materialWeight,
+      equipmentCost,
+      equipmentLifespan,
+      printTime,
+      electricityRate,
+      printerPower,
+      monthlyRent,
+      laborHourlyRate,
+      laborHours,
+      consumables,
+      painting,
+      postProcessing,
+    }
+
+    try {
+      const response = await fetch(`https://api.jsonbin.io/v3/b/${binId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Master-Key': apiKey,
+        },
+        body: JSON.stringify(settings),
+      })
+
+      if (response.ok) {
+        alert('Настройки сохранены в облаке!')
+      } else {
+        alert('Ошибка сохранения: ' + response.statusText)
+      }
+    } catch (error) {
+      alert('Ошибка сети: ' + error.message)
+    }
+  }
+
+  const loadFromCloud = async () => {
+    const apiKey = localStorage.getItem('jsonbinApiKey') || ''
+    const binId = localStorage.getItem('jsonbinBinId') || ''
+    
+    if (!apiKey || !binId) {
+      alert('Сначала настройте JSONBin.io:\n1. Зарегистрируйтесь на jsonbin.io\n2. Создайте новый bin\n3. Введите API Key и Bin ID в настройках')
+      return
+    }
+
+    try {
+      const response = await fetch(`https://api.jsonbin.io/v3/b/${binId}/latest`, {
+        headers: {
+          'X-Master-Key': apiKey,
+        },
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        const settings = data.record
+        
+        setPrinterType(settings.printerType || 'filament')
+        setMaterialCost(settings.materialCost || '')
+        setMaterialWeight(settings.materialWeight || '')
+        setEquipmentCost(settings.equipmentCost || '')
+        setEquipmentLifespan(settings.equipmentLifespan || '5')
+        setPrintTime(settings.printTime || '')
+        setElectricityRate(settings.electricityRate || '')
+        setPrinterPower(settings.printerPower || '')
+        setMonthlyRent(settings.monthlyRent || '')
+        setLaborHourlyRate(settings.laborHourlyRate || '')
+        setLaborHours(settings.laborHours || '')
+        setConsumables(settings.consumables || {
+          isopropylAlcohol: '',
+          dyes: '',
+          separators: '',
+          paint: '',
+        })
+        setPainting(settings.painting || {
+          electricityRate: '',
+          compressorCost: '',
+          airbrushCost: '',
+          primerCost: '',
+          paintConsumables: '',
+        })
+        setPostProcessing(settings.postProcessing || {
+          abrasive: '',
+          woodenSticks: '',
+          plasticSticks: '',
+          dremelConsumables: '',
+        })
+        
+        alert('Настройки загружены из облака!')
+      } else {
+        alert('Ошибка загрузки: ' + response.statusText)
+      }
+    } catch (error) {
+      alert('Ошибка сети: ' + error.message)
+    }
+  }
+
   const calculateCosts = () => {
     const materialCostNum = parseFloat(materialCost) || 0
     const materialWeightNum = parseFloat(materialWeight) || 0
@@ -224,6 +333,15 @@ function App() {
     setPostProcessing(prev => ({ ...prev, [field]: value }))
   }
 
+  const [apiKey, setApiKey] = useState(localStorage.getItem('jsonbinApiKey') || '')
+  const [binId, setBinId] = useState(localStorage.getItem('jsonbinBinId') || '')
+
+  const handleSaveConfig = () => {
+    localStorage.setItem('jsonbinApiKey', apiKey)
+    localStorage.setItem('jsonbinBinId', binId)
+    alert('Конфигурация JSONBin.io сохранена!')
+  }
+
   return (
     <ThemeProvider theme={theme}>
       <Box
@@ -268,6 +386,71 @@ function App() {
           </Fade>
 
           <Grid container spacing={2}>
+            <Grid item xs={12}>
+              <Card sx={{ mb: 2 }}>
+                <CardContent sx={{ p: 2 }}>
+                  <Typography variant="subtitle1" fontWeight={600} sx={{ mb: 2 }}>
+                    ☁️ Синхронизация с облаком (JSONBin.io)
+                  </Typography>
+                  <Grid container spacing={2} alignItems="center">
+                    <Grid item xs={12} sm={3}>
+                      <TextField
+                        fullWidth
+                        size="small"
+                        label="API Key"
+                        value={apiKey}
+                        onChange={(e) => setApiKey(e.target.value)}
+                        placeholder="$2b$10$..."
+                      />
+                    </Grid>
+                    <Grid item xs={12} sm={3}>
+                      <TextField
+                        fullWidth
+                        size="small"
+                        label="Bin ID"
+                        value={binId}
+                        onChange={(e) => setBinId(e.target.value)}
+                        placeholder="65f..."
+                      />
+                    </Grid>
+                    <Grid item xs={12} sm={2}>
+                      <Button
+                        fullWidth
+                        variant="outlined"
+                        size="small"
+                        onClick={handleSaveConfig}
+                      >
+                        Сохранить
+                      </Button>
+                    </Grid>
+                    <Grid item xs={12} sm={2}>
+                      <Button
+                        fullWidth
+                        variant="contained"
+                        size="small"
+                        startIcon={<CloudUpload />}
+                        onClick={saveToCloud}
+                        color="primary"
+                      >
+                        В облако
+                      </Button>
+                    </Grid>
+                    <Grid item xs={12} sm={2}>
+                      <Button
+                        fullWidth
+                        variant="contained"
+                        size="small"
+                        startIcon={<CloudDownload />}
+                        onClick={loadFromCloud}
+                        color="secondary"
+                      >
+                        Из облака
+                      </Button>
+                    </Grid>
+                  </Grid>
+                </CardContent>
+              </Card>
+            </Grid>
             <Grid item xs={12} md={4} lg={3}>
               <Card sx={{ height: '100%' }}>
                 <CardContent sx={{ p: 2 }}>
